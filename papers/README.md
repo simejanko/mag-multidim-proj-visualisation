@@ -2,6 +2,8 @@
 
 Kandogan, Eser. "Just-in-time annotation of clusters, outliers, and trends in point-based data visualizations." Visual Analytics Science and Technology (VAST), 2012 IEEE Conference on. IEEE, 2012.
 
+![](v1.png?raw=true)
+
 (**Motivacija**) 
 Kandogan v članku predlaga metodo za identifikacijo in anotacijo gruč, osamelcev znotraj gruč in trendov na točkovnih vizualizacijah projekcij. Trend v tem kontekstu predstavlja atribut v originalnem prostoru ter smer na vizualizaciji, v kateri ta atribut znotraj gruče narašča.
 (**Metode**) 
@@ -12,6 +14,8 @@ Metoda je ovrednotena z natančnostjo in preklicem zgeneriranih anotacij za eno 
 Delo predstavlja zanimiv pristop za anotacijo točkovnih vizualizacij. Ta pristop omejuje to, da za vse gruče na vizualizaciji prikaže enake načine prikaza in atribute (izbrane s seznama globalno zanimivih), namesto najbolj zanimivih za vsako gručo posebej, kar bomo poiskusili doseči v svojem delu. 
 
 Heimerl, Florian, et al. "DocuCompass: Effective exploration of document landscapes." Visual Analytics Science and Technology (VAST), 2016 IEEE Conference on. IEEE, 2016.
+
+![](v2.png?raw=true)
 
 (**Motivacija**) 
 Heimerl et. al. predlagajo interaktivno metodo, ki omogoča raziskovanje projekcij dokumentov
@@ -31,6 +35,8 @@ na tekstovne podatke. V našem primeru bomo namesto besed iskali pomembne vredno
 
 da Silva, R., et al. "Attribute-based visual explanation of multidimensional projections." Proc. EuroVA (2015): 134-139.
 
+![](v3.png?raw=true)
+
 (**Motivacija**) 
 Silva et. al. v tem delu predlagajo metodo za obarvanje točkovnih projekcij s ciljem, da nam v jeziku originalnih atributov obrazloži sosednosti bližnjih točk.
 (**Metode**)
@@ -46,6 +52,8 @@ Predlagana vizualizacija je še en možen pristop statične razlage podatkovnih 
 bo temeljil na dobri razdelitvi projekcije v gruče. Omenjen pristop pa je precej koristen ravno takrat, ko take razdelitve nimamo.
 
 Heulot, Nicolas, Michael Aupetit, and Jean-Daniel Fekete. "Proxilens: Interactive exploration of high-dimensional data using projections." VAMP: EuroVis Workshop on Visual Analytics using Multidimensional Projections. The Eurographics Association, 2013.
+
+![](v4.png?raw=true)
 
 (**Motivacija**) 
 Heulot et. al. predlagajo
@@ -63,6 +71,8 @@ Predlagana metoda je zanimiv primer dinamičnega raziskovanja točkovnih projekc
 vsesplošne projekcije visoko dimenzionalnih podatkov. Določene dele tega pristopa bi lahko vključili tudi v naš pristop z lupo. 
 
 Stahnke, Julian, et al. "Probing projections: Interaction techniques for interpreting arrangements and errors of dimensionality reductions." IEEE transactions on visualization and computer graphics 22.1 (2016): 629-638.
+
+![](v5.png?raw=true)
 
 (**Motivacija**) 
 V tem delu Stahnke et. al. predlagajo orodje za interaktivno raziskovanje projekcij visoko dimenzionalnih podatkov.
