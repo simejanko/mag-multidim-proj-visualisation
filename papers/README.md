@@ -1,4 +1,5 @@
 #Sorodni članki
+
 Kandogan, Eser. "Just-in-time annotation of clusters, outliers, and trends in point-based data visualizations." Visual Analytics Science and Technology (VAST), 2012 IEEE Conference on. IEEE, 2012.
 
 (**Motivacija**) 
