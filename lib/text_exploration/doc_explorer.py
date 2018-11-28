@@ -12,10 +12,16 @@ import matplotlib.cm as cm
 NON_ALPHABETIC_REGEX = re.compile('[^a-zA-Z]')
 STOP_WORDS = set(stopwords.words('english'))
 
+
+def remove_non_alphabetic(text):
+    return NON_ALPHABETIC_REGEX.sub(' ', text).lower()
+
+
 class DocExplorer():
     """ Visualisation tool for static and dynamic exploration of documents. """
 
-    def __init__(self, clustering=DBSCAN(), n_keywords_static=3, n_keywords_dynamic=5):
+    def __init__(self, clustering=DBSCAN(), method='tfidf', n_keywords_static=3,
+                 n_keywords_dynamic=5):
         """
         :param clustering: Clustering object with sklearn's interface (fit_predict method)
         :param method: Method to use for keyword extraction. Either 'tfidf' or 'g2'
@@ -23,53 +29,94 @@ class DocExplorer():
         :param n_keywords_dynamic: Number of keywords to display for lense exploration
         """
         self.clustering = clustering
+        self.method = method
         self.n_keywords_static = n_keywords_static
         self.n_keywords_dynamic = n_keywords_dynamic
 
-        self.tfidf_matrix = None
-        self.tfidf_feature_names = None
+        self.tf_matrix = None
+        self.tf_feature_names = None
 
         self.X_em = None
 
     def fit(self, docs, X_em=None):
         """
-        Performs text preprocessing, feature extraction and embedding. Remembers what is needed for lens exploration.
+        Performs text preprocessing and feature extraction that's needed for keyword extraction. Remembers what is needed for lens exploration.
         :param docs: list of text documents (strings)
-        :param X_em: numpy array of embeddings with shape (n_samples, 2). If None, t-sne is performed on word count matrix.
+        :param X_em: numpy array of embeddings with shape (n_samples, 2). If None, embedding object given in constructor
+         is used on on tf or tf-idf matrix depending on the keyword extraction method used.
         """
 
-        def remove_non_alphabetic(text):
-            return NON_ALPHABETIC_REGEX.sub(' ', text).lower()
-
-        tfidf_vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(),
-                                           preprocessor=remove_non_alphabetic,
-                                           max_df=0.5)
-        self.tfidf_matrix = tfidf_vectorizer.fit_transform(docs).toarray()
-        self.tfidf_feature_names = np.array(tfidf_vectorizer.get_feature_names())
+        tf_vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(),
+                                        preprocessor=remove_non_alphabetic,
+                                        max_df=0.5, use_idf=self.method == 'tfidf')
+        self.tf_matrix = tf_vectorizer.fit_transform(docs).toarray()
+        self.tf_feature_names = np.array(tf_vectorizer.get_feature_names())
 
         if X_em is None:
-            self.X_em = TSNE().fit_transform(self.tfidf_matrix)
+            self.X_em = TSNE().fit_transform(self.tf_matrix)
         else:
             self.X_em = X_em
+
+    def _keywords_tfidf(self, clusters):
+        """
+        :return: Keywords for each cluster using tf-idf method.
+        """
+        keywords = dict()
+        for c in np.unique(clusters):
+            keywords_idx = np.argsort(np.sum(self.tf_matrix[clusters == c, :], axis=0))[
+                           -self.n_keywords_static:]
+            keywords[c] = list(reversed(self.tf_feature_names[keywords_idx]))
+        return keywords
+
+    def _keywords_g2(self, clusters):
+        """
+        :return: Keywords for each cluster using G2 method.
+        """
+        tf_totals_words = self.tf_matrix.sum(axis=0)
+        tf_totals_documents = self.tf_matrix.sum(axis=1)
+        tf_expected = tf_totals_words / tf_totals_words.sum()
+
+        keywords = dict()
+        for c in np.unique(clusters):
+            is_in_cluster = clusters == c
+            expected_in_cluster = tf_totals_documents[is_in_cluster].sum() * tf_expected
+            expected_out_cluster = tf_totals_documents[~is_in_cluster].sum() * tf_expected
+            tf_in_cluster = self.tf_matrix[is_in_cluster, :].sum(axis=0)
+            tf_out_cluster = tf_totals_words - tf_in_cluster
+
+            g2 = 2 * (tf_in_cluster * np.log((1 + tf_in_cluster) / expected_in_cluster) +
+                      (tf_out_cluster * np.log((1 + tf_out_cluster) / expected_out_cluster)))
+
+            keywords_idx = np.argsort(g2)[-self.n_keywords_static:]
+            keywords[c] = list(reversed(self.tf_feature_names[keywords_idx]))
+        return keywords
 
     def plot_static(self):
         """
         Plots static labels for clusters of the embedding.
+        :param size: figure size
         """
         clusters = self.clustering.fit_predict(self.X_em)
-        cmap = cm.get_cmap('Set1')
-        for c in np.unique(clusters):
-            is_in_cluster = clusters==c
-            plt.scatter(self.X_em[is_in_cluster, 0], self.X_em[is_in_cluster, 1], c=cmap(c))
+        extract_keywords = self._keywords_tfidf if self.method == 'tfidf' else self._keywords_g2
+        keywords = extract_keywords(clusters)
 
+        plt.scatter(self.X_em[:, 0], self.X_em[:, 1], c='gray', edgecolors='black')
+
+        for c in np.unique(clusters):
             if c < 0:
                 continue
 
-            keywords_idx = np.argsort(np.sum(self.tfidf_matrix[clusters == c, :], axis=0))[
-                           -self.n_keywords_static:]
-            keywords = reversed(self.tfidf_feature_names[keywords_idx])
             x_avg, y_avg = np.mean(self.X_em[clusters == c, :], axis=0)
-            plt.text(x_avg, y_avg, '\n'.join(keywords), ha='center', va='center', bbox=dict(facecolor=cmap(c), alpha=0.2), color='black', fontweight='bold')
+            font_sizes = np.linspace(16, 8, num=self.n_keywords_static)
+            dy = 0
+            for i, keyword in enumerate(keywords[c]):
+                plt.text(x_avg, y_avg + dy, keyword, ha='center', va='center', fontsize=font_sizes[i],
+                                bbox=dict(facecolor='red', alpha=0.5, linewidth=0), color='white', fontweight='bold')
+
+                #TODO: obtain actual text size
+                if i % 2 == 0:
+                    dy -= 2
+                dy = -dy
 
     def plot_dynamic(self, x, y, r):
         """
