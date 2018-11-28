@@ -15,14 +15,13 @@ STOP_WORDS = set(stopwords.words('english'))
 class DocExplorer():
     """ Visualisation tool for static and dynamic exploration of documents. """
 
-    def __init__(self, embedding=TSNE(), clustering=DBSCAN(), n_keywords_static=3, n_keywords_dynamic=5):
+    def __init__(self, clustering=DBSCAN(), n_keywords_static=3, n_keywords_dynamic=5):
         """
-        :param embedding: Embedding object with sklearn's interface (fit_transform method)
         :param clustering: Clustering object with sklearn's interface (fit_predict method)
+        :param method: Method to use for keyword extraction. Either 'tfidf' or 'g2'
         :param n_keywords_static: Number of keywords to display per cluster
         :param n_keywords_dynamic: Number of keywords to display for lense exploration
         """
-        self.embedding = embedding
         self.clustering = clustering
         self.n_keywords_static = n_keywords_static
         self.n_keywords_dynamic = n_keywords_dynamic
@@ -32,10 +31,11 @@ class DocExplorer():
 
         self.X_em = None
 
-    def fit(self, docs):
+    def fit(self, docs, X_em=None):
         """
         Performs text preprocessing, feature extraction and embedding. Remembers what is needed for lens exploration.
         :param docs: list of text documents (strings)
+        :param X_em: numpy array of embeddings with shape (n_samples, 2). If None, t-sne is performed on word count matrix.
         """
 
         def remove_non_alphabetic(text):
@@ -47,7 +47,10 @@ class DocExplorer():
         self.tfidf_matrix = tfidf_vectorizer.fit_transform(docs).toarray()
         self.tfidf_feature_names = np.array(tfidf_vectorizer.get_feature_names())
 
-        self.X_em = self.embedding.fit_transform(self.tfidf_matrix)
+        if X_em is None:
+            self.X_em = TSNE().fit_transform(self.tfidf_matrix)
+        else:
+            self.X_em = X_em
 
     def plot_static(self):
         """
