@@ -108,15 +108,13 @@ class DocExplorer():
 
             x_avg, y_avg = np.mean(self.X_em[clusters == c, :], axis=0)
             font_sizes = np.linspace(16, 8, num=self.n_keywords_static)
-            dy = 0
+            dy = [0, 0]
             for i, keyword in enumerate(keywords[c]):
-                plt.text(x_avg, y_avg + dy, keyword, ha='center', va='center', fontsize=font_sizes[i],
-                                bbox=dict(facecolor='red', alpha=0.5, linewidth=0), color='white', fontweight='bold')
-
-                #TODO: obtain actual text size
-                if i % 2 == 0:
-                    dy -= 2
-                dy = -dy
+                annotation_side = (i % 2 * 2 - 1)
+                dy[i % 2] += annotation_side*font_sizes[i] * 0.6
+                plt.annotate(keyword, (x_avg, y_avg), (0, dy[i%2]), textcoords='offset points', ha='center', va='center', fontsize=font_sizes[i],
+                                bbox=dict(boxstyle='square,pad=0.1',facecolor='red', alpha=0.5, linewidth=0), color='white', fontweight='bold')
+                dy[i % 2] += annotation_side*font_sizes[i] * 0.6
 
     def plot_dynamic(self, x, y, r):
         """
