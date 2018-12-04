@@ -20,15 +20,13 @@ def remove_non_alphabetic(text):
 class DocExplorer():
     """ Visualisation tool for static and dynamic exploration of documents. """
 
-    def __init__(self, clustering=DBSCAN(), method='tfidf', n_keywords_static=3,
+    def __init__(self, method='tfidf', n_keywords_static=3,
                  n_keywords_dynamic=5):
         """
-        :param clustering: Clustering object with sklearn's interface (fit_predict method)
         :param method: Method to use for keyword extraction. Either 'tfidf' or 'g2'
         :param n_keywords_static: Number of keywords to display per cluster
         :param n_keywords_dynamic: Number of keywords to display for lense exploration
         """
-        self.clustering = clustering
         self.method = method
         self.n_keywords_static = n_keywords_static
         self.n_keywords_dynamic = n_keywords_dynamic
@@ -37,13 +35,16 @@ class DocExplorer():
         self.tf_feature_names = None
 
         self.X_em = None
+        self.clusters = None
 
-    def fit(self, docs, X_em=None):
+    def fit(self, docs, X_em=None, clusters=None):
         """
         Performs text preprocessing and feature extraction that's needed for keyword extraction. Remembers what is needed for lens exploration.
         :param docs: list of text documents (strings)
-        :param X_em: numpy array of embeddings with shape (n_samples, 2). If None, embedding object given in constructor
-         is used on on tf or tf-idf matrix depending on the keyword extraction method used.
+        :param X_em: numpy array of embeddings with shape (n_samples, 2). If None, t-SNE with default parameters
+         is used on tf or tf-idf matrix depending on the keyword extraction method used.
+        :param clusters: numpy array of cluster labels with shape (n_samples,). If None, DBSCAN with default parameters
+        is used on tf or tf-idf matrix depending on the keyword extraction method used.
         """
 
         tf_vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(),
@@ -56,6 +57,11 @@ class DocExplorer():
             self.X_em = TSNE().fit_transform(self.tf_matrix)
         else:
             self.X_em = X_em
+
+        if clusters is None:
+            self.clusters = DBSCAN().fit_predict(self.tf_matrix)
+        else:
+            self.clusters = clusters
 
     def _keywords_tfidf(self, clusters):
         """
@@ -84,37 +90,40 @@ class DocExplorer():
             tf_in_cluster = self.tf_matrix[is_in_cluster, :].sum(axis=0)
             tf_out_cluster = tf_totals_words - tf_in_cluster
 
-            g2 = 2 * (tf_in_cluster * np.log((1 + tf_in_cluster) / expected_in_cluster) +
-                      (tf_out_cluster * np.log((1 + tf_out_cluster) / expected_out_cluster)))
+            g2 = 2 * (tf_in_cluster * np.log((1e-10 + tf_in_cluster) / expected_in_cluster) +
+                      (tf_out_cluster * np.log((1e-10 + tf_out_cluster) / expected_out_cluster)))
 
             keywords_idx = np.argsort(g2)[-self.n_keywords_static:]
             keywords[c] = list(reversed(self.tf_feature_names[keywords_idx]))
         return keywords
 
-    def plot_static(self):
+    def plot_static(self, fig_size=(12, 10)):
         """
         Plots static labels for clusters of the embedding.
         :param size: figure size
         """
-        clusters = self.clustering.fit_predict(self.X_em)
         extract_keywords = self._keywords_tfidf if self.method == 'tfidf' else self._keywords_g2
-        keywords = extract_keywords(clusters)
+        keywords = extract_keywords(self.clusters)
 
-        plt.scatter(self.X_em[:, 0], self.X_em[:, 1], c='gray', edgecolors='black')
+        f, ax = plt.subplots(figsize=fig_size)
+        ax.scatter(self.X_em[:, 0], self.X_em[:, 1], c='gray', edgecolors='black')
 
-        for c in np.unique(clusters):
+        for c in np.unique(self.clusters):
             if c < 0:
                 continue
 
-            x_avg, y_avg = np.mean(self.X_em[clusters == c, :], axis=0)
-            font_sizes = np.linspace(16, 8, num=self.n_keywords_static)
+            x_avg, y_avg = np.mean(self.X_em[self.clusters == c, :], axis=0)
+            font_sizes = np.linspace(16, 9, num=self.n_keywords_static)
             dy = [0, 0]
             for i, keyword in enumerate(keywords[c]):
                 annotation_side = (i % 2 * 2 - 1)
-                dy[i % 2] += annotation_side*font_sizes[i] * 0.6
-                plt.annotate(keyword, (x_avg, y_avg), (0, dy[i%2]), textcoords='offset points', ha='center', va='center', fontsize=font_sizes[i],
-                                bbox=dict(boxstyle='square,pad=0.1',facecolor='red', alpha=0.5, linewidth=0), color='white', fontweight='bold')
-                dy[i % 2] += annotation_side*font_sizes[i] * 0.6
+                dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+                ax.annotate(keyword, (x_avg, y_avg), (0, dy[i % 2]), textcoords='offset points', ha='center',
+                            va='center', fontsize=font_sizes[i],
+                            bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=0.5, linewidth=0),
+                            color='white', fontweight='bold')
+                dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+        return ax
 
     def plot_dynamic(self, x, y, r):
         """
