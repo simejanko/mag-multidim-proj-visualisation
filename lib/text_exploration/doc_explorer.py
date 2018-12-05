@@ -37,7 +37,7 @@ class DocExplorer():
         self.n_keywords_static = n_keywords_static
         self.n_keywords_dynamic = n_keywords_dynamic
 
-        _, self.ax = plt.subplots(figsize=fig_size)
+        self.fig, self.ax = plt.subplots(figsize=fig_size)
         self.scatter_plot = None
         self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
         self.ax.add_artist(self.lens)
@@ -152,6 +152,9 @@ class DocExplorer():
         :param y: y coordinate of the lens.
         :param r: radius of the lens.
         """
+        self.lens.center = x, y
+        self.lens.set_radius(r)
+
         # remove old dynamic annotations
         for ann in self.annotations:
             ann.remove()
@@ -160,26 +163,41 @@ class DocExplorer():
         is_selected = np.zeros(self.tf_matrix.shape[0], bool)
         selected_idx = self.kd_tree.query_radius([[x, y]], r=r)[0]
         is_selected[selected_idx] = True
-        keywords = self.extract_keywords(is_selected, self.n_keywords_dynamic)
+        if np.sum(is_selected) == 0:
+            return self.ax
 
-        self.lens.center = x, y
-        self.lens.set_radius(r)
+        keywords = self.extract_keywords(is_selected, self.n_keywords_dynamic)
 
         face_colors = [(0.5, 0.5, 0.5, 1) if s else (0.5, 0.5, 0.5, 0.4) for s in is_selected]
         edge_colors = [(0, 0, 0, 1) if s else (0, 0, 0, 0.4) for s in is_selected]
         self.scatter_plot.set_facecolor(face_colors)
         self.scatter_plot.set_edgecolor(edge_colors)
 
-        dy = -1.2 * self.DYNM_FONT_SIZE * self.n_keywords_dynamic / 2
+        dy = 1.2 * self.DYNM_FONT_SIZE * self.n_keywords_dynamic / 2
         for i, keyword in enumerate(keywords):
             ann = self.ax.annotate(keyword, (x - r, y), (0, dy), textcoords='offset points', ha='right',
                                    va='center', fontsize=self.DYNM_FONT_SIZE,
                                    bbox=dict(boxstyle='square,pad=0.1', fill=False),
                                    color='black')
             self.annotations.append(ann)
-            dy += 1.2 * self.DYNM_FONT_SIZE
+            dy -= 1.2 * self.DYNM_FONT_SIZE
 
         return self.ax
+
+    def plot_interactive(self, r=5):
+        """
+        Connect click event with dynamic label updating for interactivity.
+        :param r: lens radius
+        """
+
+        def onclick(event):
+            if event.button != 1:
+                return
+
+            self.plot_dynamic(event.xdata, event.ydata, self.lens.get_radius())
+
+        self.lens.set_radius(r)
+        self.fig.canvas.mpl_connect('button_press_event', onclick)
 
 
 class LemmaTokenizer(object):
