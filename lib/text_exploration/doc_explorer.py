@@ -39,6 +39,9 @@ class DocExplorer():
 
         _, self.ax = plt.subplots(figsize=fig_size)
         self.scatter_plot = None
+        self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
+        self.ax.add_artist(self.lens)
+        self.annotations = []
 
         self.tf_matrix = None
         self.tf_feature_names = None
@@ -144,18 +147,23 @@ class DocExplorer():
 
     def plot_dynamic(self, x, y, r):
         """
-        Plots dynamic labels for the given lens parameters.
+        Updates dynamic labels for the given lens parameters.
         :param x: x coordinate of the lens.
         :param y: y coordinate of the lens.
         :param r: radius of the lens.
         """
+        # remove old dynamic annotations
+        for ann in self.annotations:
+            ann.remove()
+        self.annotations = []
+
         is_selected = np.zeros(self.tf_matrix.shape[0], bool)
         selected_idx = self.kd_tree.query_radius([[x, y]], r=r)[0]
         is_selected[selected_idx] = True
         keywords = self.extract_keywords(is_selected, self.n_keywords_dynamic)
 
-        lens = plt.Circle((x, y), r, edgecolor='black', fill=False)
-        self.ax.add_artist(lens)
+        self.lens.center = x, y
+        self.lens.set_radius(r)
 
         face_colors = [(0.5, 0.5, 0.5, 1) if s else (0.5, 0.5, 0.5, 0.4) for s in is_selected]
         edge_colors = [(0, 0, 0, 1) if s else (0, 0, 0, 0.4) for s in is_selected]
@@ -164,10 +172,11 @@ class DocExplorer():
 
         dy = -1.2 * self.DYNM_FONT_SIZE * self.n_keywords_dynamic / 2
         for i, keyword in enumerate(keywords):
-            self.ax.annotate(keyword, (x - r, y), (0, dy), textcoords='offset points', ha='right',
-                             va='center', fontsize=self.DYNM_FONT_SIZE,
-                             bbox=dict(boxstyle='square,pad=0.1', fill=False),
-                             color='black')
+            ann = self.ax.annotate(keyword, (x - r, y), (0, dy), textcoords='offset points', ha='right',
+                                   va='center', fontsize=self.DYNM_FONT_SIZE,
+                                   bbox=dict(boxstyle='square,pad=0.1', fill=False),
+                                   color='black')
+            self.annotations.append(ann)
             dy += 1.2 * self.DYNM_FONT_SIZE
 
         return self.ax
