@@ -17,11 +17,11 @@ def remove_non_alphabetic(text):
     return NON_ALPHABETIC_REGEX.sub(' ', text).lower()
 
 
-class DocExplorer():
+class DocExplorer:
     """ Visualisation tool for static and dynamic exploration of documents. """
 
-    STAT_FONT_SIZE_MAX = 16
-    STAT_FONT_SIZE_MIN = 9
+    STAT_FONT_SIZE_MAX = 18
+    STAT_FONT_SIZE_MIN = 10
     DYNM_FONT_SIZE = 12
 
     def __init__(self, method='tfidf', n_keywords_static=3,
@@ -143,7 +143,7 @@ class DocExplorer():
                                  bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=0.5, linewidth=0),
                                  color='white', fontweight='bold')
                 dy[i % 2] += annotation_side * font_sizes[i] * 0.6
-        return self.ax
+        return self.fig
 
     def plot_dynamic(self, x, y, r):
         """
@@ -175,14 +175,13 @@ class DocExplorer():
 
         dy = 1.2 * self.DYNM_FONT_SIZE * self.n_keywords_dynamic / 2
         for i, keyword in enumerate(keywords):
-            ann = self.ax.annotate(keyword, (x - r, y), (0, dy), textcoords='offset points', ha='right',
+            ann = self.ax.annotate(keyword, (x - r, y), (-3, dy), textcoords='offset points', ha='right',
                                    va='center', fontsize=self.DYNM_FONT_SIZE,
                                    bbox=dict(boxstyle='square,pad=0.1', fill=False),
                                    color='black')
             self.annotations.append(ann)
             dy -= 1.2 * self.DYNM_FONT_SIZE
-
-        return self.ax
+        return self.fig
 
     def plot_interactive(self, r=5):
         """
@@ -196,9 +195,8 @@ class DocExplorer():
 
             self.plot_dynamic(event.xdata, event.ydata, self.lens.get_radius())
 
-        self.lens.set_radius(r)
         self.fig.canvas.mpl_connect('button_press_event', onclick)
-
+        return self.plot_dynamic(self.lens.center[0], self.lens.center[1], r)
 
 class LemmaTokenizer(object):
     """ Utility class for including lemmatization and stop word removal in tokenization. """
