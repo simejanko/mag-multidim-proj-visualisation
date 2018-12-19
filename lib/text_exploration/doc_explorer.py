@@ -8,6 +8,8 @@ import numpy as np
 from matplotlib import pyplot as plt
 import re
 from sklearn.neighbors import KDTree
+from sklearn.preprocessing import LabelEncoder
+from matplotlib import patches
 
 NON_ALPHABETIC_REGEX = re.compile('[^a-zA-Z]')
 STOP_WORDS = set(stopwords.words('english'))
@@ -117,12 +119,23 @@ class DocExplorer:
         keywords_idx = np.argsort(g2)[-n_keywords:]
         return list(reversed(self.tf_feature_names[keywords_idx]))
 
-    def plot_static(self):
+    def plot_static(self, classes=None):
         """
         Plots static labels for clusters of the embedding.
+        :param classes: color array of shape (n_samples, ) that allows custom coloring of scatter plot based on class attribute.
         """
-        self.scatter_plot = self.ax.scatter(self.X_em[:, 0], self.X_em[:, 1], facecolor=(0.5, 0.5, 0.5, 1),
-                                            edgecolor=(0, 0, 0, 1))
+        if classes is None:
+            colors = [(0.5, 0.5, 0.5, 1)] * self.tf_matrix.shape[0]
+            legend_patches = []
+        else:
+            cmap = plt.get_cmap('tab10')
+            le = LabelEncoder()
+            y = le.fit_transform(classes)
+            colors = cmap(y)
+            legend_patches = [patches.Patch(color=cmap(le.transform([c])[0]), label=c) for c in le.classes_]
+
+        self.scatter_plot = self.ax.scatter(self.X_em[:, 0], self.X_em[:, 1], facecolor=colors,
+                                            edgecolor=[(0, 0, 0, 1)] * self.tf_matrix.shape[0])
         self.ax.axis('equal')
 
         for c in np.unique(self.clusters):
@@ -143,7 +156,11 @@ class DocExplorer:
                                  bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=0.5, linewidth=0),
                                  color='white', fontweight='bold')
                 dy[i % 2] += annotation_side * font_sizes[i] * 0.6
-        return self.fig
+
+        if len(legend_patches) > 0:
+            self.ax.legend(handles=legend_patches)
+
+        return self.fig, self.ax
 
     def plot_dynamic(self, x, y, r):
         """
@@ -168,8 +185,12 @@ class DocExplorer:
 
         keywords = self.extract_keywords(is_selected, self.n_keywords_dynamic)
 
-        face_colors = [(0.5, 0.5, 0.5, 1) if s else (0.5, 0.5, 0.5, 0.4) for s in is_selected]
-        edge_colors = [(0, 0, 0, 1) if s else (0, 0, 0, 0.4) for s in is_selected]
+        face_colors = self.scatter_plot.get_facecolor()
+        edge_colors = self.scatter_plot.get_edgecolor()
+        face_colors[is_selected, -1] = 1
+        face_colors[~is_selected, -1] = 0.5
+        edge_colors[is_selected, -1] = 1
+        edge_colors[~is_selected, -1] = 0.5
         self.scatter_plot.set_facecolor(face_colors)
         self.scatter_plot.set_edgecolor(edge_colors)
 
@@ -181,7 +202,7 @@ class DocExplorer:
                                    color='black')
             self.annotations.append(ann)
             dy -= 1.2 * self.DYNM_FONT_SIZE
-        return self.fig
+        return self.fig, self.ax
 
     def plot_interactive(self, r=5):
         """
@@ -197,6 +218,7 @@ class DocExplorer:
 
         self.fig.canvas.mpl_connect('button_press_event', onclick)
         return self.plot_dynamic(self.lens.center[0], self.lens.center[1], r)
+
 
 class LemmaTokenizer(object):
     """ Utility class for including lemmatization and stop word removal in tokenization. """
