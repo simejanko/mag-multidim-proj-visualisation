@@ -39,11 +39,12 @@ class DocExplorer:
         self.n_keywords_static = n_keywords_static
         self.n_keywords_dynamic = n_keywords_dynamic
 
-        self.fig, self.ax = plt.subplots(figsize=fig_size)
+        self.fig_size = fig_size
+        self.fig = None
+        self.ax = None
         self.scatter_plot = None
-        self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
-        self.ax.add_artist(self.lens)
-        self.annotations = []
+        self.lens = None
+        self.annotations = None
 
         self.tf_matrix = None
         self.tf_feature_names = None
@@ -65,6 +66,12 @@ class DocExplorer:
         :param clusters: numpy array of cluster labels with shape (n_samples,). If None, DBSCAN with default parameters
         is used on tf or tf-idf matrix depending on the keyword extraction method used.
         """
+
+        self.fig, self.ax = plt.subplots(figsize=self.fig_size)
+        self.scatter_plot = None
+        self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
+        self.ax.add_artist(self.lens)
+        self.annotations = []
 
         tf_vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(),
                                         preprocessor=remove_non_alphabetic,
@@ -181,7 +188,7 @@ class DocExplorer:
         selected_idx = self.kd_tree.query_radius([[x, y]], r=r)[0]
         is_selected[selected_idx] = True
         if np.sum(is_selected) == 0:
-            return self.ax
+            return self.fig, self.ax
 
         keywords = self.extract_keywords(is_selected, self.n_keywords_dynamic)
 
@@ -217,7 +224,8 @@ class DocExplorer:
             self.plot_dynamic(event.xdata, event.ydata, self.lens.get_radius())
 
         self.fig.canvas.mpl_connect('button_press_event', onclick)
-        return self.plot_dynamic(self.lens.center[0], self.lens.center[1], r)
+        self.lens.set_radius(r)
+        return self.fig, self.ax
 
 
 class LemmaTokenizer(object):
