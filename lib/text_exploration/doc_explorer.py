@@ -57,7 +57,7 @@ class DocExplorer:
         self.tf_totals_documents = None
         self.tf_expected = None
 
-    def fit(self, docs, X_em=None, clusters=None):
+    def fit(self, docs, X_em=None, clusters=None, ax=None):
         """
         Performs text preprocessing and feature extraction that's needed for keyword extraction. Remembers what is needed for lens exploration.
         :param docs: list of text documents (strings)
@@ -65,9 +65,14 @@ class DocExplorer:
          is used on tf or tf-idf matrix depending on the keyword extraction method used.
         :param clusters: numpy array of cluster labels with shape (n_samples,). If None, DBSCAN with default parameters
         is used on tf or tf-idf matrix depending on the keyword extraction method used.
+        :param ax: specify existing matplotlib axis to use for this plot.
         """
 
-        self.fig, self.ax = plt.subplots(figsize=self.fig_size)
+        if ax is None:
+            self.fig, self.ax = plt.subplots(figsize=self.fig_size)
+        else:
+            self.ax = ax
+
         self.scatter_plot = None
         self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
         self.ax.add_artist(self.lens)
@@ -126,10 +131,13 @@ class DocExplorer:
         keywords_idx = np.argsort(g2)[-n_keywords:]
         return list(reversed(self.tf_feature_names[keywords_idx]))
 
-    def plot_static(self, classes=None):
+    def plot_static(self, classes=None, annotation_bg_alpha=0.5, plot_keywords=True,**kwargs):
         """
         Plots static labels for clusters of the embedding.
         :param classes: color array of shape (n_samples, ) that allows custom coloring of scatter plot based on class attribute.
+        :param kwargs: optional other parameters to pass to matplotlib's scatterplot
+        :param annotation_bg_alpha: transparency of annotation backgrounds.
+        :param plot_keywords: true if keywords should be included in the visualisation, false otherwise.
         """
         if classes is None:
             colors = [(0.5, 0.5, 0.5, 1)] * self.tf_matrix.shape[0]
@@ -142,27 +150,29 @@ class DocExplorer:
             legend_patches = [patches.Patch(color=cmap(le.transform([c])[0]), label=c) for c in le.classes_]
 
         self.scatter_plot = self.ax.scatter(self.X_em[:, 0], self.X_em[:, 1], facecolor=colors,
-                                            edgecolor=[(0, 0, 0, 1)] * self.tf_matrix.shape[0])
+                                            edgecolor=[(0, 0, 0, 1)] * self.tf_matrix.shape[0], **kwargs)
         self.ax.axis('equal')
 
-        for c in np.unique(self.clusters):
-            if c < 0:
-                continue
 
-            is_in_cluster = self.clusters == c
-            keywords = self.extract_keywords(is_in_cluster, self.n_keywords_static)
+        if plot_keywords:
+            for c in np.unique(self.clusters):
+                if c < 0:
+                    continue
 
-            x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
-            font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.n_keywords_static)
-            dy = [0, 0]
-            for i, keyword in enumerate(keywords):
-                annotation_side = (i % 2 * 2 - 1)
-                dy[i % 2] += annotation_side * font_sizes[i] * 0.6
-                self.ax.annotate(keyword, (x_avg, y_avg), (0, dy[i % 2]), textcoords='offset points', ha='center',
-                                 va='center', fontsize=font_sizes[i],
-                                 bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=0.5, linewidth=0),
-                                 color='white', fontweight='bold')
-                dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+                is_in_cluster = self.clusters == c
+                keywords = self.extract_keywords(is_in_cluster, self.n_keywords_static)
+
+                x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
+                font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.n_keywords_static)
+                dy = [0, 0]
+                for i, keyword in enumerate(keywords):
+                    annotation_side = (i % 2 * 2 - 1)
+                    dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+                    self.ax.annotate(keyword, (x_avg, y_avg), (0, dy[i % 2]), textcoords='offset points', ha='center',
+                                     va='center', fontsize=font_sizes[i],
+                                     bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=annotation_bg_alpha, linewidth=0),
+                                     color='white', fontweight='bold')
+                    dy[i % 2] += annotation_side * font_sizes[i] * 0.6
 
         if len(legend_patches) > 0:
             self.ax.legend(handles=legend_patches)
