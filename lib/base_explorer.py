@@ -3,16 +3,17 @@ from matplotlib import pyplot as plt
 from sklearn.neighbors import KDTree
 from sklearn.preprocessing import LabelEncoder
 from matplotlib import patches
+from abc import ABC, abstractmethod
 
 
-class ProjectionExplorer:
-    """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
+class BaseExplorer(ABC):
+    """ Base class for visualisation tools for static and dynamic exploration of projections for different types of data. """
 
     STAT_FONT_SIZE_MAX = 18
     STAT_FONT_SIZE_MIN = 10
     DYNM_FONT_SIZE = 12
 
-    def __init__(self, p_threshold=0.1, max_static_labels=3, max_dynamic_labels=5, fig_size=(12, 10)):
+    def __init__(self, max_static_labels=3, max_dynamic_labels=5, fig_size=(12, 10)):
         """
         :param p_threshold: statistical significance (p-value) threshold for annotations
         :param max_static_labels: maximum number of static labels per cluster.
@@ -20,7 +21,6 @@ class ProjectionExplorer:
         :param fig_size: Figure size.
         """
 
-        self.p_threshold = p_threshold
         self.max_static_labels = max_static_labels
         self.max_dynamic_labels = max_dynamic_labels
 
@@ -31,15 +31,17 @@ class ProjectionExplorer:
         self.lens = None
         self.annotations = None
 
-        self.df = None
         self.X_em = None
         self.clusters = None
         self.kd_tree = None
 
-    def fit(self, df, X_em, clusters, ax=None):
+        super().__init__()
+
+    @abstractmethod
+    def fit(self, data, X_em, clusters, ax=None):
         """
         Performs any kind of preprocessing and caching needed for lens exploration.
-        :param df: pandas DataFrame. Only the following dtypes will be considered: (object, category, bool, intXX, floatXX)
+        :param data: input data. Different type across subclasses.
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
         :param ax: specify existing matplotlib axis to use for this visualisation
@@ -55,12 +57,12 @@ class ProjectionExplorer:
         self.ax.add_artist(self.lens)
         self.annotations = []
 
-        self.df = df
         self.X_em = X_em
         self.clusters = clusters
 
         self.kd_tree = KDTree(self.X_em, leaf_size=20)
 
+    @abstractmethod
     def _extract_labels(self, is_in_cluster, max_labels):
         """
         Get labels for a given cluster.
@@ -68,7 +70,7 @@ class ProjectionExplorer:
         :param max_labels: maximum number of labels to extract
         :return: list of labels
         """
-        return []
+        pass
 
     def plot_static(self, classes=None, annotation_bg_alpha=0.5, plot_labels=True, **kwargs):
         """
@@ -79,7 +81,7 @@ class ProjectionExplorer:
         :param kwargs: optional other parameters to pass to matplotlib's scatterplot
         """
         if classes is None:
-            colors = [(0.5, 0.5, 0.5, 1)] * self.df.shape[0]
+            colors = [(0.5, 0.5, 0.5, 1)] * self.X_em.shape[0]
             legend_patches = []
         else:
             cmap = plt.get_cmap('tab10')
@@ -89,7 +91,7 @@ class ProjectionExplorer:
             legend_patches = [patches.Patch(color=cmap(le.transform([c])[0]), label=c) for c in le.classes_]
 
         self.scatter_plot = self.ax.scatter(self.X_em[:, 0], self.X_em[:, 1], facecolor=colors,
-                                            edgecolor=[(0, 0, 0, 1)] * self.df.shape[0], **kwargs)
+                                            edgecolor=[(0, 0, 0, 1)] * self.X_em.shape[0], **kwargs)
         self.ax.axis('equal')
 
         if plot_labels:
@@ -99,7 +101,7 @@ class ProjectionExplorer:
 
                 is_in_cluster = self.clusters == c
                 labels = self._extract_labels(is_in_cluster, self.max_static_labels)
-                print(np.mean(self.X_em[is_in_cluster, :], axis=0))
+
                 x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
                 font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.max_static_labels)
                 dy = [0, 0]
@@ -133,7 +135,7 @@ class ProjectionExplorer:
             ann.remove()
         self.annotations = []
 
-        is_selected = np.zeros(self.df.shape[0], bool)
+        is_selected = np.zeros(self.X_em.shape[0], bool)
         selected_idx = self.kd_tree.query_radius([[x, y]], r=r)[0]
         is_selected[selected_idx] = True
         if np.sum(is_selected) == 0:
