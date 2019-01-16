@@ -4,6 +4,9 @@ import numpy as np
 from lib.utils.statistics import Hypergeometric
 import pandas as pd
 
+#TODO: one way to make these methods more efficient is to take into account the fact that we're dynamically exploring
+# nearby points and not just any points. One could use structures like kd-trees or similiar and store relevant
+# aggregates in the nodes. 
 
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
