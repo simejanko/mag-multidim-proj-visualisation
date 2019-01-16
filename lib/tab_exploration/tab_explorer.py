@@ -1,7 +1,8 @@
 from lib.base_explorer import BaseExplorer
 from scipy.stats import ttest_ind
 import numpy as np
-
+from lib.utils.statistics import Hypergeometric
+import pandas as pd
 
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
@@ -17,6 +18,9 @@ class TabExplorer(BaseExplorer):
         self.p_threshold = p_threshold
         self.df_numeric = None
         self.df_discrete = None
+        self.discrete_columns = None
+        self.value_counts = None
+        self.hypergeom = Hypergeometric(max=10000)
 
         super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels, fig_size=fig_size)
 
@@ -32,7 +36,13 @@ class TabExplorer(BaseExplorer):
         super().fit(df, X_em, clusters, ax=ax)
 
         self.df_numeric = df.select_dtypes(include=[np.number]).astype(np.float32)
-        self.df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
+
+        df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
+        self.discrete_columns = df_discrete.columns.values
+        self.df_discrete = pd.get_dummies()
+
+        # TODO: remove, in case out-cluster K and N values turn out to be correct approach (Wikipedia notation)
+        self.value_counts = self.df_discrete.sum()
 
     def _extract_labels(self, is_in_cluster, max_labels):
         """
@@ -46,6 +56,12 @@ class TabExplorer(BaseExplorer):
         numeric_out_cluster = self.df_numeric.loc[~is_in_cluster].values
         # TODO: we only have to compute means and stds once and use the other ttest call
         _, p_values = ttest_ind(numeric_in_cluster, numeric_out_cluster, equal_var=False)
+
+        # hypergeometric test for discrete attributes
+        # TODO : possible bias: We used in vs out cluster for t-test, but for hypergeom we're using in-cluster for k and n
+        #       and global values for K and N... should we use out-cluster values for K and N? (Wikipedia notation)
+
+
 
         p_order = np.argsort(p_values)
         threshold_idx = np.searchsorted(p_values, self.p_threshold, sorter=p_order, side='right')
