@@ -4,6 +4,7 @@ import numpy as np
 from lib.utils.statistics import Hypergeometric
 import pandas as pd
 
+
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
 
@@ -19,8 +20,7 @@ class TabExplorer(BaseExplorer):
         self.df_numeric = None
         self.df_discrete = None
         self.discrete_columns = None
-        self.value_counts = None
-        self.hypergeom = Hypergeometric(max=10000)
+        self.hypergeom = None
 
         super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels, fig_size=fig_size)
 
@@ -38,8 +38,9 @@ class TabExplorer(BaseExplorer):
         self.df_numeric = df.select_dtypes(include=[np.number]).astype(np.float32)
 
         df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
-        self.discrete_columns = df_discrete.columns.values
-        self.df_discrete = pd.get_dummies()
+        self.df_discrete = pd.concat([pd.get_dummies(df_discrete[col]) for col in df_discrete], axis=1, keys=df_discrete.columns)
+        # TODO: max can be max(largest_cluster, N-smallest cluster) in case out-cluster K and N values turn out to be correct approach (Wikipedia notation)
+        self.hypergeom = Hypergeometric(max=df.shape[0])
 
         # TODO: remove, in case out-cluster K and N values turn out to be correct approach (Wikipedia notation)
         self.value_counts = self.df_discrete.sum()
@@ -60,7 +61,6 @@ class TabExplorer(BaseExplorer):
         # hypergeometric test for discrete attributes
         # TODO : possible bias: We used in vs out cluster for t-test, but for hypergeom we're using in-cluster for k and n
         #       and global values for K and N... should we use out-cluster values for K and N? (Wikipedia notation)
-
 
 
         p_order = np.argsort(p_values)
