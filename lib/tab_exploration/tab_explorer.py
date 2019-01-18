@@ -81,8 +81,8 @@ class TabExplorer(BaseExplorer):
         #       and global values for K and N... should we use out-cluster values for K and N? (Wikipedia notation)
         discrete_in_cluster_counts = self.df_discrete.loc[is_in_cluster].sum()
         discrete_p_values = self.discrete_value_counts.combine(discrete_in_cluster_counts,
-                                                               lambda vc, dc: self.hypergeom(dc, total_size, vc,
-                                                                                             cluster_size))
+                                                               lambda vc, dc: self.hypergeom.p_value(dc, total_size, vc,
+                                                                                                     cluster_size))
         discrete_min_p_values = discrete_p_values.groupby(level=0).min()
 
         return discrete_p_values, discrete_min_p_values
