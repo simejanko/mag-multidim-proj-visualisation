@@ -107,8 +107,8 @@ class TabExplorer(BaseExplorer):
         for c in selected_columns:
             if c in self.df_numeric.columns:
                 # label for continuous attribute
-                avg_in = self.df_numeric[c, is_in_cluster].mean()
-                avg_out = self.df_numeric[c, ~is_in_cluster].mean()
+                avg_in = self.df_numeric.loc[is_in_cluster, c].mean()
+                avg_out = self.df_numeric.loc[~is_in_cluster, c].mean()
 
                 label = '{} = {:.2f} ({})'.format(c, avg_in, 'high' if avg_in > avg_out else 'low')
             else:
