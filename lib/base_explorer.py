@@ -13,16 +13,18 @@ class BaseExplorer(ABC):
     STAT_FONT_SIZE_MIN = 10
     DYNM_FONT_SIZE = 12
 
-    def __init__(self, max_static_labels=3, max_dynamic_labels=5, fig_size=(12, 10)):
+    def __init__(self, max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5, fig_size=(12, 10)):
         """
         :param p_threshold: statistical significance (p-value) threshold for annotations
         :param max_static_labels: maximum number of static labels per cluster.
         :param max_dynamic_labels: maximum number of dynamic labels (shown for selected group of examples)
+        :param min_cluster_size: minimum number of members in a cluster for showing a label
         :param fig_size: Figure size.
         """
 
         self.max_static_labels = max_static_labels
         self.max_dynamic_labels = max_dynamic_labels
+        self.min_cluster_size = min_cluster_size
 
         self.fig_size = fig_size
         self.fig = None
@@ -100,6 +102,10 @@ class BaseExplorer(ABC):
                     continue
 
                 is_in_cluster = self.clusters == c
+
+                if np.sum(is_in_cluster) < self.min_cluster_size:
+                    continue
+
                 labels = self._extract_labels(is_in_cluster, self.max_static_labels)
 
                 x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)

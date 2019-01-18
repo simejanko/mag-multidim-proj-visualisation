@@ -14,8 +14,8 @@ import pandas as pd
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
 
-    def __init__(self, p_threshold=0.01, max_static_labels=3, max_dynamic_labels=5, max_discrete_values=3,
-                 fig_size=(12, 10)):
+    def __init__(self, p_threshold=0.01, max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5,
+                 max_discrete_values=3, fig_size=(12, 10)):
         """
         :param p_threshold: statistical significance (p-value) threshold for annotations
         :param max_static_labels: maximum number of static labels per cluster
@@ -32,7 +32,8 @@ class TabExplorer(BaseExplorer):
         self.discrete_value_counts = None
         self.hypergeom = None
 
-        super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels, fig_size=fig_size)
+        super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
+                         min_cluster_size=min_cluster_size, fig_size=fig_size)
 
     def fit(self, df, X_em, clusters, ax=None):
         """

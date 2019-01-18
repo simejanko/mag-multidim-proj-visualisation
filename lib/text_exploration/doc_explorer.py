@@ -17,8 +17,8 @@ def remove_non_alphabetic(text):
 class DocExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of documents. """
 
-    def __init__(self, method='tfidf', max_static_labels=3,
-                 max_dynamic_labels=5, fig_size=(12, 10)):
+    def __init__(self, method='tfidf', max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5,
+                 fig_size=(12, 10)):
         """
         :param method: Method to use for keyword extraction. Either 'tfidf' or 'g2'
         :param max_static_labels: Number of keywords to display per cluster
@@ -33,7 +33,8 @@ class DocExplorer(BaseExplorer):
         self.tf_totals_documents = None
         self.tf_expected = None
 
-        super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels, fig_size=fig_size)
+        super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
+                         min_cluster_size=min_cluster_size, fig_size=fig_size)
 
     def fit(self, docs, X_em, clusters, ax=None):
         """
