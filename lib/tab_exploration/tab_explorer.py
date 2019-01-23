@@ -35,16 +35,15 @@ class TabExplorer(BaseExplorer):
         super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
                          min_cluster_size=min_cluster_size, fig_size=fig_size)
 
-    def fit(self, df, X_em, clusters, ax=None):
+    def fit(self, df, X_em, clusters):
         """
         Performs any kind of preprocessing and caching needed for lens exploration.
         :param df: pandas DataFrame. Only the following dtypes will be considered: (object, category, bool, intXX, floatXX)
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
-        :param ax: specify existing matplotlib axis to use for this visualisation
         """
 
-        super().fit(df, X_em, clusters, ax=ax)
+        super().fit(df, X_em, clusters)
 
         self.df_numeric = df.select_dtypes(include=[np.number]).astype(np.float32)
 
@@ -81,9 +80,10 @@ class TabExplorer(BaseExplorer):
         # TODO : possible bias: We used in vs out cluster for t-test, but for hypergeom we're using in-cluster for k and n
         #       and global values for K and N... should we use out-cluster values for K and N? (Wikipedia notation)
         discrete_in_cluster_counts = self.df_discrete.loc[is_in_cluster].sum()
-        discrete_p_values = self.discrete_value_counts.combine(discrete_in_cluster_counts,
-                                                               lambda vc, dc: self.hypergeom.p_value(dc, total_size, vc,
-                                                                                                     cluster_size))
+        discrete_p_values = [self.hypergeom.p_value(dc, total_size, vc,cluster_size)
+                             for vc, dc in zip(self.discrete_value_counts, discrete_in_cluster_counts)]
+        discrete_p_values = pd.Series(discrete_p_values, index=discrete_in_cluster_counts.index)
+
         discrete_min_p_values = discrete_p_values.groupby(level=0).min()
 
         return discrete_p_values, discrete_min_p_values

@@ -36,16 +36,15 @@ class DocExplorer(BaseExplorer):
         super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
                          min_cluster_size=min_cluster_size, fig_size=fig_size)
 
-    def fit(self, docs, X_em, clusters, ax=None):
+    def fit(self, docs, X_em, clusters):
         """
         Performs text preprocessing and feature extraction that's needed for keyword extraction. Remembers what is needed for lens exploration.
         :param docs: list of text documents (strings)
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
-        :param ax: specify existing matplotlib axis to use for this plot.
         """
 
-        super().fit(docs, X_em, clusters, ax=ax)
+        super().fit(docs, X_em, clusters)
 
         tf_vectorizer = TfidfVectorizer(tokenizer=LemmaTokenizer(),
                                         preprocessor=remove_non_alphabetic,
