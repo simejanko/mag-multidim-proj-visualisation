@@ -114,16 +114,21 @@ class BaseExplorer(ABC):
 
                 x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
                 font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.max_static_labels)
-                dy = [0, 0]
+                dy = [0, font_sizes[0] * 0.6]
                 for i, label in enumerate(labels):
                     annotation_side = (i % 2 * 2 - 1)
-                    dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+                    if i>0:
+                        dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+
                     self.ax.annotate(label, (x_avg, y_avg), (0, dy[i % 2]), textcoords='offset points', ha='center',
                                      va='center', fontsize=font_sizes[i],
                                      bbox=dict(boxstyle='square,pad=0.1', facecolor='red', alpha=annotation_bg_alpha,
                                                linewidth=0),
                                      color='white', fontweight='bold')
+
                     dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+
+                #self.ax.text(x_avg, y_avg, '\n'.join(labels), ha='center', va='center', fontsize=np.mean(font_sizes)+1)
 
         if len(legend_patches) > 0:
             self.ax.legend(handles=legend_patches)
