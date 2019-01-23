@@ -40,14 +40,13 @@ class BaseExplorer(ABC):
         super().__init__()
 
     @abstractmethod
-    def fit(self, data, X_em, clusters, ax=None):
+    def fit(self, data, X_em, clusters):
         """
         Performs any kind of preprocessing and caching needed for lens exploration.
         :param data: input data. Different type across subclasses.
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
         """
-        self.ax = ax
         self.annotations = []
 
         self.X_em = X_em
