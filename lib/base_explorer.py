@@ -46,9 +46,17 @@ class BaseExplorer(ABC):
         :param data: input data. Different type across subclasses.
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
-        :param ax: specify existing matplotlib axis to use for this visualisation
         """
+        self.ax = ax
+        self.annotations = []
 
+        self.X_em = X_em
+        self.clusters = clusters
+
+        self.kd_tree = KDTree(self.X_em, leaf_size=20)
+
+    def _init_plot(self, ax = None):
+        """ Initializes plot. """
         if ax is None:
             self.fig, self.ax = plt.subplots(figsize=self.fig_size)
         else:
@@ -57,12 +65,6 @@ class BaseExplorer(ABC):
         self.scatter_plot = None
         self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
         self.ax.add_artist(self.lens)
-        self.annotations = []
-
-        self.X_em = X_em
-        self.clusters = clusters
-
-        self.kd_tree = KDTree(self.X_em, leaf_size=20)
 
     @abstractmethod
     def _extract_labels(self, is_in_cluster, max_labels):
@@ -74,14 +76,17 @@ class BaseExplorer(ABC):
         """
         pass
 
-    def plot_static(self, classes=None, annotation_bg_alpha=0.5, plot_labels=True, **kwargs):
+    def plot_static(self, classes=None, annotation_bg_alpha=0.5, plot_labels=True, ax=None, **kwargs):
         """
         Plots static labels for clusters of the embedding.
         :param classes: color array of shape (n_samples, ) that allows custom coloring of scatter plot based on class attribute.
         :param annotation_bg_alpha: transparency of annotation backgrounds.
         :param plot_labels: true if labels should be included in the visualisation, false otherwise.
+        :param ax: specify existing matplotlib axis to use for this visualisation
         :param kwargs: optional other parameters to pass to matplotlib's scatterplot
         """
+        self._init_plot(ax=ax)
+
         if classes is None:
             colors = [(0.5, 0.5, 0.5, 1)] * self.X_em.shape[0]
             legend_patches = []
