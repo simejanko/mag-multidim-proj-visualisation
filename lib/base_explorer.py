@@ -7,7 +7,6 @@ from abc import ABC, abstractmethod
 from adjustText import adjust_text
 
 
-# TODO: refactor. Split long functions into multiple parts. Most notably plot_static.
 class BaseExplorer(ABC):
     """ Base class for visualisation tools for static and dynamic exploration of projections for different types of data. """
 
@@ -77,10 +76,79 @@ class BaseExplorer(ABC):
         """
         pass
 
+    def _obtain_static_labels_and_bounding_boxes(self):
+        """
+        Obtains static labels for all clusters as well as corresponding matplotlib Text objects
+        with approximate bounding boxes later used by label overlap resolver
+        :return list of tuples (label_group, (x,y)) and list of corresponding matplotlib Text objects
+        """
+        text_objects = []
+        all_labels = []
+
+        for c in np.unique(self.clusters):
+            if c < 0:
+                continue
+
+            is_in_cluster = self.clusters == c
+
+            if np.sum(is_in_cluster) < self.min_cluster_size:
+                continue
+
+            labels = self._extract_labels(is_in_cluster, self.max_static_labels)
+            x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
+            all_labels.append((labels, (x_avg, y_avg)))
+
+            #
+            text = self.ax.text(x_avg, y_avg, '\n'.join(labels), ha='center', va='center',
+                                fontsize=1 + (self.STAT_FONT_SIZE_MAX + self.STAT_FONT_SIZE_MIN) / 2, alpha=0)
+            text_objects.append(text)
+
+        return text_objects, all_labels
+
+    def _plot_static_labels(self, annotation_bg_alpha, avoid_overlaps, displacement_lines):
+        """
+        Plots static labels for clusters of the embedding.
+        :param annotation_bg_alpha: transparency of annotation backgrounds.
+        :param avoid_overlaps: tries to avoid static label overlaps but may lead to inaccurate label placements
+        :param displacement_lines: adds soft lines to indicate displacements made by avoiding overlaps.
+        """
+
+        text_objects, all_labels = self._obtain_static_labels_and_bounding_boxes()
+
+        # displace labels to resolve overlaps
+        if avoid_overlaps:
+            adjust_text(text_objects, ax=self.ax, text_from_points=False, autoalign=False, force_text=0.1)
+
+        # draw actual annotations on displaced locations
+        for (labels, (x_orig, y_orig)), text in zip(all_labels, text_objects):
+            x, y = text.get_position()
+            text.remove()
+
+            font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.max_static_labels)
+            dy = [0, font_sizes[0] * 0.6]
+            for i, label in enumerate(labels):
+                annotation_side = (i % 2 * 2 - 1)
+                if i > 0:
+                    dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+
+                if displacement_lines:
+                    self.ax.arrow(x, y, x_orig - x, y_orig - y, edgecolor=(1.0, 0.0, 0.0, annotation_bg_alpha / 2),
+                                  width=1e-6)
+
+                self.ax.annotate(label, (x, y), (0, dy[i % 2]), textcoords='offset points',
+                                 ha='center',
+                                 va='center', fontsize=font_sizes[i],
+                                 bbox=dict(boxstyle='square,pad=0.1', facecolor='red',
+                                           alpha=annotation_bg_alpha,
+                                           linewidth=0),
+                                 color='white', fontweight='bold')
+
+                dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+
     def plot_static(self, classes=None, annotation_bg_alpha=0.5, plot_labels=True, avoid_overlaps=False,
                     displacement_lines=True, ax=None, **kwargs):
         """
-        Plots static labels for clusters of the embedding.
+        Plots scatter plot and static labels for clusters of the embedding.
         :param classes: color array of shape (n_samples, ) that allows custom coloring of scatter plot based on class attribute.
         :param annotation_bg_alpha: transparency of annotation backgrounds.
         :param plot_labels: true if labels should be included in the visualisation, false otherwise.
@@ -106,56 +174,7 @@ class BaseExplorer(ABC):
         self.ax.axis('equal')
 
         if plot_labels:
-            text_objects = []
-            all_labels = []
-
-            for c in np.unique(self.clusters):
-                if c < 0:
-                    continue
-
-                is_in_cluster = self.clusters == c
-
-                if np.sum(is_in_cluster) < self.min_cluster_size:
-                    continue
-
-                labels = self._extract_labels(is_in_cluster, self.max_static_labels)
-                x_avg, y_avg = np.mean(self.X_em[is_in_cluster, :], axis=0)
-                all_labels.append((labels, (x_avg, y_avg)))
-
-                # we store matplotlib Text objects with approximate bounding boxes used by label overlap resolver
-                text = self.ax.text(x_avg, y_avg, '\n'.join(labels), ha='center', va='center',
-                                    fontsize=1 + (self.STAT_FONT_SIZE_MAX + self.STAT_FONT_SIZE_MIN) / 2, alpha=0)
-                text_objects.append(text)
-
-            # displace labels to resolve overlaps
-            if avoid_overlaps:
-                adjust_text(text_objects, ax=self.ax, text_from_points=False, autoalign=False, force_text=0.1)
-
-            # draw actual annotations on displaced locations
-            for (labels, (x_orig, y_orig)), text in zip(all_labels, text_objects):
-                x, y = text.get_position()
-                text.remove()
-
-                font_sizes = np.linspace(self.STAT_FONT_SIZE_MAX, self.STAT_FONT_SIZE_MIN, num=self.max_static_labels)
-                dy = [0, font_sizes[0] * 0.6]
-                for i, label in enumerate(labels):
-                    annotation_side = (i % 2 * 2 - 1)
-                    if i > 0:
-                        dy[i % 2] += annotation_side * font_sizes[i] * 0.6
-
-                    if displacement_lines:
-                        self.ax.arrow(x, y, x_orig - x, y_orig - y, edgecolor=(1.0, 0.0, 0.0, annotation_bg_alpha / 2),
-                                      width=1e-6)
-
-                    self.ax.annotate(label, (x, y), (0, dy[i % 2]), textcoords='offset points',
-                                     ha='center',
-                                     va='center', fontsize=font_sizes[i],
-                                     bbox=dict(boxstyle='square,pad=0.1', facecolor='red',
-                                               alpha=annotation_bg_alpha,
-                                               linewidth=0),
-                                     color='white', fontweight='bold')
-
-                    dy[i % 2] += annotation_side * font_sizes[i] * 0.6
+            self._plot_static_labels(annotation_bg_alpha, avoid_overlaps, displacement_lines)
 
         if len(legend_patches) > 0:
             self.ax.legend(handles=legend_patches)
