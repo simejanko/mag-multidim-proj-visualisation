@@ -1,30 +1,36 @@
 from lib.base_explorer import BaseExplorer
 from scipy.stats import ttest_ind
 import numpy as np
-from lib.utils.statistics import Hypergeometric
+from lib.utils.statistics import Hypergeometric, p_adjust_bh
 import pandas as pd
 
-
-# TODO: indicate private members
 
 # TODO: one way to make these methods more efficient is to take into account the fact that we're dynamically exploring
 # nearby points and not just any points. One could use structures like kd-trees or similiar and store relevant
 # aggregates in the nodes.
 
+# TODO : handle cases when Dataframe only contains numeric or discrete data.
+# TODO : try one-sample t-test or t-test for all
+
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
 
-    def __init__(self, p_threshold=0.01, max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5,
-                 max_discrete_values=3, fig_size=(12, 10)):
+    def __init__(self, p_threshold=0.01, representative_threshold=0.5, fdr_correction=True, max_static_labels=3,
+                 max_dynamic_labels=5, min_cluster_size=5, max_discrete_values=3, fig_size=(12, 10)):
         """
         :param p_threshold: statistical significance (p-value) threshold for annotations
+        :param representative_threshold: only show labels that represent at least this proportion of samples in a group.
+                                         Addresses the representativeness vs significance problem.
+        :param fdr_correction: whether to apply FDR correction to p-values (multiple comparisons problem)
         :param max_static_labels: maximum number of static labels per cluster
         :param max_dynamic_labels: maximum number of dynamic labels (shown for selected group of examples)
         :param max_discrete_values: maximum number of values shown for discrete attributes
-        :param fig_size: Figure size.
+        :param fig_size: Figure size
         """
 
         self.p_threshold = p_threshold
+        self.representative_threshold = representative_threshold
+        self.fdr_correction = fdr_correction
         self.max_discrete_values = max_discrete_values
         self.df_numeric = None
         self.df_discrete = None
@@ -50,10 +56,8 @@ class TabExplorer(BaseExplorer):
         df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
         self.df_discrete = pd.concat([pd.get_dummies(df_discrete[col]) for col in df_discrete], axis=1,
                                      keys=df_discrete.columns)
-        # TODO: max can be max(largest_cluster, N-smallest cluster) in case out-cluster K and N values turn out to be correct approach (Wikipedia notation)
         self.hypergeom = Hypergeometric(max=df.shape[0])
 
-        # TODO: remove, in case out-cluster K and N values turn out to be correct approach (Wikipedia notation)
         self.discrete_value_counts = self.df_discrete.sum()
 
     def _numeric_p_values(self, is_in_cluster):
@@ -67,26 +71,24 @@ class TabExplorer(BaseExplorer):
         # TODO: we only have to compute means and stds once and use the other ttest call
         _, numeric_p_values = ttest_ind(numeric_in_cluster.values, numeric_out_cluster.values, equal_var=False)
 
-        return pd.Series(numeric_p_values, index=self.df_numeric.columns)
+        # use MultiIndex for better compatibility with discrete p-values Series
+        return pd.Series(numeric_p_values,
+                         index=pd.MultiIndex.from_tuples(list(zip(self.df_numeric.columns, self.df_numeric.columns))))
 
     def _discrete_p_values(self, is_in_cluster):
         """
         Computes p-values for discrete attributes using hypergeometric test for every possible discrete value.
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
-        :return  tuple with two pandas Series: (p-values for all discrete values, minimum p-values per discrete attribute)
+        :return  pandas Series with p-values
         """
         total_size = self.df_discrete.shape[0]
         cluster_size = np.sum(is_in_cluster)
-        # TODO : possible bias: We used in vs out cluster for t-test, but for hypergeom we're using in-cluster for k and n
-        #       and global values for K and N... should we use out-cluster values for K and N? (Wikipedia notation)
         discrete_in_cluster_counts = self.df_discrete.loc[is_in_cluster].sum()
-        discrete_p_values = [self.hypergeom.p_value(dc, total_size, vc,cluster_size)
+        discrete_p_values = [self.hypergeom.p_value(dc, total_size, vc, cluster_size)
                              for vc, dc in zip(self.discrete_value_counts, discrete_in_cluster_counts)]
         discrete_p_values = pd.Series(discrete_p_values, index=discrete_in_cluster_counts.index)
 
-        discrete_min_p_values = discrete_p_values.groupby(level=0).min()
-
-        return discrete_p_values, discrete_min_p_values
+        return discrete_p_values
 
     def _extract_labels(self, is_in_cluster, max_labels):
         """
@@ -96,20 +98,31 @@ class TabExplorer(BaseExplorer):
         :return: list of labels
         """
         numeric_p_values = self._numeric_p_values(is_in_cluster)
-        discrete_p_values, discrete_min_p_values = self._discrete_p_values(is_in_cluster)
+        discrete_p_values = self._discrete_p_values(is_in_cluster)
+        p_values = pd.concat([numeric_p_values, discrete_p_values])
 
-        # select attributes to display
-        p_values = pd.concat([numeric_p_values, discrete_min_p_values]).sort_values()
+        if self.fdr_correction:
+            p_values = p_adjust_bh(p_values)
+
+        # pick min values for discrete attributes
+        p_values = p_values.groupby(level=0).min().sort_values()
+
+        # apply p-value threshold
         threshold_idx = np.searchsorted(p_values.values, self.p_threshold, side='right')
-        selected_columns = p_values[:min(max_labels, threshold_idx)].index.values
+        selected_columns = p_values[:threshold_idx].index.values
 
         # generate labels
         labels = []
         for c in selected_columns:
             if c in self.df_numeric.columns:
                 # label for continuous attribute
-                avg_in = self.df_numeric.loc[is_in_cluster, c].mean()
+                #TODO: probably inefficient
+                s_in = self.df_numeric.loc[is_in_cluster, c]
+                avg_in = s_in.mean()
                 avg_out = self.df_numeric.loc[~is_in_cluster, c].mean()
+
+                #representative proportion for this label and group
+                rep_proportion = ((s_in > avg_out) if avg_in > avg_out else (s_in < avg_out)).sum()/s_in.size
 
                 label = '{} = {:.2f} ({})'.format(c, avg_in, 'high' if avg_in > avg_out else 'low')
             else:
@@ -120,8 +133,15 @@ class TabExplorer(BaseExplorer):
                 if len(selected_values) > 1:
                     selected_values[-1] = ' or ' + selected_values[-1]
 
+                #TODO
+                rep_proportion = 1.0
+
                 label = '{} = {}'.format(c, ', '.join(selected_values[:-1]) + selected_values[-1])
 
-            labels.append(label)
+            if rep_proportion >= self.representative_threshold:
+                labels.append(label)
+
+            if len(labels) == max_labels:
+                break
 
         return labels

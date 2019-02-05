@@ -1,6 +1,7 @@
 """ Statistic utilities. Full source found at https://github.com/biolab/orange3-bioinformatics. """
 import math
 import threading
+import numpy as np
 
 def _lngamma(z):
     x = 0
@@ -92,3 +93,16 @@ class Hypergeometric(LogBin):
                 return sum(self.__call__(i, N, m, n) for i in range(k, min(n, m)+1))
             else:
                 return value
+
+
+def p_adjust_bh(p):
+    """
+    Benjamini-Hochberg p-value correction for multiple hypothesis testing.
+    :param p: numpy array or pandas Series of p-values
+    :return: FDR corrected p-values
+    """
+    descend = p.argsort()[::-1]
+    orig = descend.argsort()
+    steps = len(p) / np.arange(len(p), 0, -1)
+    q = np.minimum(1, np.minimum.accumulate(steps * p[descend]))
+    return q[orig]
