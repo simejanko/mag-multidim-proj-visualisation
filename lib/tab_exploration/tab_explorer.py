@@ -128,13 +128,14 @@ class TabExplorer(BaseExplorer):
             else:
                 # label for discrete attribute
                 pv = discrete_p_values[c]
-                selected_values = pv[pv <= self.p_threshold][:self.max_discrete_values].index.tolist()
+                selected_values = pv[pv <= self.p_threshold].sort_values()[:self.max_discrete_values].index.tolist()
+                # TODO: probably inefficient
+                s_in = self.df_discrete.loc[is_in_cluster, (c, selected_values)].any(axis=1)
+                rep_proportion = s_in.sum()/s_in.size
+
                 selected_values = list(map(str, selected_values))
                 if len(selected_values) > 1:
                     selected_values[-1] = ' or ' + selected_values[-1]
-
-                #TODO
-                rep_proportion = 1.0
 
                 label = '{} = {}'.format(c, ', '.join(selected_values[:-1]) + selected_values[-1])
 
