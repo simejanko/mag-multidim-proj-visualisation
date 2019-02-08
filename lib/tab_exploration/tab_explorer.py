@@ -9,7 +9,6 @@ import pandas as pd
 # nearby points and not just any points. One could use structures like kd-trees or similiar and store relevant
 # aggregates in the nodes.
 
-# TODO : handle cases when Dataframe only contains numeric or discrete data.
 # TODO : try one-sample t-test or t-test for all
 
 class TabExplorer(BaseExplorer):
@@ -53,12 +52,14 @@ class TabExplorer(BaseExplorer):
 
         self.df_numeric = df.select_dtypes(include=[np.number]).astype(np.float32)
 
-        df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
-        self.df_discrete = pd.concat([pd.get_dummies(df_discrete[col]) for col in df_discrete], axis=1,
-                                     keys=df_discrete.columns)
+        self.df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
+        if not self.df_discrete.empty:
+            self.df_discrete = pd.concat([pd.get_dummies(self.df_discrete[col]) for col in self.df_discrete], axis=1,
+                                         keys=self.df_discrete.columns)
+            self.discrete_value_counts = self.df_discrete.sum()
+
         self.hypergeom = Hypergeometric(max=df.shape[0])
 
-        self.discrete_value_counts = self.df_discrete.sum()
 
     def _numeric_p_values(self, is_in_cluster):
         """
@@ -66,6 +67,9 @@ class TabExplorer(BaseExplorer):
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
         :return pandas Series with p-values
         """
+        if self.df_numeric.empty:
+            return None
+
         numeric_in_cluster = self.df_numeric.loc[is_in_cluster]
         numeric_out_cluster = self.df_numeric.loc[~is_in_cluster]
         # TODO: we only have to compute means and stds once and use the other ttest call
@@ -81,6 +85,9 @@ class TabExplorer(BaseExplorer):
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
         :return  pandas Series with p-values
         """
+        if self.df_discrete.empty:
+            return None
+
         total_size = self.df_discrete.shape[0]
         cluster_size = np.sum(is_in_cluster)
         discrete_in_cluster_counts = self.df_discrete.loc[is_in_cluster].sum()
@@ -99,7 +106,8 @@ class TabExplorer(BaseExplorer):
         """
         numeric_p_values = self._numeric_p_values(is_in_cluster)
         discrete_p_values = self._discrete_p_values(is_in_cluster)
-        p_values = pd.concat([numeric_p_values, discrete_p_values])
+
+        p_values = pd.concat([pv for pv in (numeric_p_values, discrete_p_values) if pv is not None])
 
         if self.fdr_correction:
             p_values = p_adjust_bh(p_values)
@@ -116,13 +124,12 @@ class TabExplorer(BaseExplorer):
         for c in selected_columns:
             if c in self.df_numeric.columns:
                 # label for continuous attribute
-                #TODO: probably inefficient
+                # TODO: probably inefficient
                 s_in = self.df_numeric.loc[is_in_cluster, c]
                 avg_in = s_in.mean()
                 avg_out = self.df_numeric.loc[~is_in_cluster, c].mean()
 
-                #representative proportion for this label and group
-                rep_proportion = ((s_in > avg_out) if avg_in > avg_out else (s_in < avg_out)).sum()/s_in.size
+                rep_proportion = ((s_in > avg_out) if avg_in > avg_out else (s_in < avg_out)).sum() / s_in.size
 
                 label = '{} = {:.2f} ({})'.format(c, avg_in, 'high' if avg_in > avg_out else 'low')
             else:
@@ -131,7 +138,7 @@ class TabExplorer(BaseExplorer):
                 selected_values = pv[pv <= self.p_threshold].sort_values()[:self.max_discrete_values].index.tolist()
                 # TODO: probably inefficient
                 s_in = self.df_discrete.loc[is_in_cluster, (c, selected_values)].any(axis=1)
-                rep_proportion = s_in.sum()/s_in.size
+                rep_proportion = s_in.sum() / s_in.size
 
                 selected_values = list(map(str, selected_values))
                 if len(selected_values) > 1:
@@ -139,6 +146,7 @@ class TabExplorer(BaseExplorer):
 
                 label = '{} = {}'.format(c, ', '.join(selected_values[:-1]) + selected_values[-1])
 
+            # does label represent a big enough portion of the samples in a group
             if rep_proportion >= self.representative_threshold:
                 labels.append(label)
 
