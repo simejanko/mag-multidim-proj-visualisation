@@ -97,6 +97,7 @@ class TabExplorer(BaseExplorer):
 
         return discrete_p_values
 
+    #TODO: refactor
     def _extract_labels(self, is_in_cluster, max_labels):
         """
         Get labels for a given cluster.
