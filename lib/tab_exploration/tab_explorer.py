@@ -145,7 +145,10 @@ class TabExplorer(BaseExplorer):
                 # TODO: probably inefficient
                 s_in = self.df_numeric.loc[is_in_cluster, c]
                 avg_in = s_in.mean()
-                avg_out = self.df_numeric.loc[~is_in_cluster, c].mean()
+                if self.use_two_sample_test:
+                    avg_out = self.df_numeric.loc[~is_in_cluster, c].mean()
+                else:
+                    avg_out = self.numeric_means[c]
 
                 rep_proportion = ((s_in > avg_out) if avg_in > avg_out else (s_in < avg_out)).sum() / s_in.size
 
