@@ -10,6 +10,7 @@ import pandas as pd
 # nearby points and not just any points. One could use structures like kd-trees or similiar and store relevant
 # aggregates in the nodes.
 
+
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
 
@@ -44,17 +45,20 @@ class TabExplorer(BaseExplorer):
         self.discrete_value_counts = None
         self.discrete_value_means = None
         self.hypergeom = None
+        self.labels_dict = None
 
         super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
                          min_cluster_size=min_cluster_size, fig_size=fig_size)
 
-    def fit(self, df, X_em, clusters):
+    def fit(self, df, X_em, clusters, labels_dict={}):
         """
         Performs any kind of preprocessing and caching needed for lens exploration.
 
         :param df: pandas DataFrame. Only the following dtypes will be considered: (object, category, bool, intXX, floatXX)
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
+        :param labels_dict: dict mapping from attribute names to labels to be displayed in case attribute is deemed significant
+                            (this overrides default way of displaying labels)
         """
 
         super().fit(df, X_em, clusters)
@@ -70,6 +74,8 @@ class TabExplorer(BaseExplorer):
             self.discrete_value_means = self.df_discrete.mean()
 
         self.hypergeom = Hypergeometric(max=df.shape[0])
+
+        self.labels_dict = labels_dict
 
     def _numeric_p_values(self, is_in_cluster):
         """
@@ -175,6 +181,9 @@ class TabExplorer(BaseExplorer):
                     selected_values[-1] = ' or ' + selected_values[-1]
 
                 label = '{} = {}'.format(c, ', '.join(selected_values[:-1]) + selected_values[-1])
+
+            if c in self.labels_dict:
+                label = self.labels_dict[c]
 
             # does label represent a big enough portion of the samples in a group
             if rep_proportion >= self.representative_threshold:
