@@ -5,7 +5,8 @@ from sklearn.preprocessing import LabelEncoder
 from matplotlib import patches
 from abc import ABC, abstractmethod
 from adjustText import adjust_text
-
+from scipy.spatial.distance import euclidean
+from lib.utils.geometry import rectangle_circle_bbox_intersect
 
 class BaseExplorer(ABC):
     """ Base class for visualisation tools for static and dynamic exploration of projections for different types of data. """
@@ -32,7 +33,8 @@ class BaseExplorer(ABC):
         self.ax = None
         self.scatter_plot = None
         self.lens = None
-        self.annotations = None
+        self.static_annotations = None
+        self.dynamic_annotations = None
 
         self.X_em = None
         self.clusters = None
@@ -48,7 +50,8 @@ class BaseExplorer(ABC):
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
         """
-        self.annotations = []
+        self.static_annotations = set()
+        self.dynamic_annotations = set()
 
         self.X_em = X_em
         self.clusters = clusters
@@ -65,6 +68,8 @@ class BaseExplorer(ABC):
         self.scatter_plot = None
         self.lens = plt.Circle((0, 0), 0, edgecolor='black', fill=False)
         self.ax.add_artist(self.lens)
+
+        self.static_annotations = set()
 
     @abstractmethod
     def _extract_labels(self, is_in_cluster, max_labels):
@@ -135,13 +140,14 @@ class BaseExplorer(ABC):
                     self.ax.arrow(x, y, x_orig - x, y_orig - y, edgecolor=(1.0, 0.0, 0.0, annotation_bg_alpha / 2),
                                   width=1e-6)
 
-                self.ax.annotate(label, (x, y), (0, dy[i % 2]), textcoords='offset points',
-                                 ha='center',
-                                 va='center', fontsize=font_sizes[i],
-                                 bbox=dict(boxstyle='square,pad=0.1', facecolor='red',
-                                           alpha=annotation_bg_alpha,
-                                           linewidth=0),
-                                 color='white', fontweight='bold')
+                ann = self.ax.annotate(label, (x, y), (0, dy[i % 2]), textcoords='offset points',
+                                       ha='center',
+                                       va='center', fontsize=font_sizes[i],
+                                       bbox=dict(boxstyle='square,pad=0.1', facecolor='red',
+                                                 alpha=annotation_bg_alpha,
+                                                 linewidth=0),
+                                       color='white', fontweight='bold')
+                self.static_annotations.add(ann)
 
                 dy[i % 2] += annotation_side * font_sizes[i] * 0.6
 
@@ -181,6 +187,22 @@ class BaseExplorer(ABC):
 
         return self.fig, self.ax
 
+    def _resolve_dynamic_overlaps(self):
+        """
+        Hides static labels that intersect with lens.
+        """
+        for sa in self.static_annotations:
+            sa.set_visible(True)
+            sa_bbox = sa.get_window_extent().transformed(self.ax.transData.inverted())
+            sa_bbox = sa_bbox.x0, sa_bbox.y0, sa_bbox.width, sa_bbox.height
+
+            lens_circle = self.lens.center + (self.lens.get_radius(), )
+
+            if rectangle_circle_bbox_intersect(sa_bbox, lens_circle):
+                sa.set_visible(False)
+                continue
+
+
     def plot_dynamic(self, x, y, r):
         """
         Updates dynamic labels for the given lens parameters.
@@ -192,9 +214,9 @@ class BaseExplorer(ABC):
         self.lens.set_radius(r)
 
         # remove old dynamic annotations
-        for ann in self.annotations:
+        for ann in self.dynamic_annotations:
             ann.remove()
-        self.annotations = []
+        self.dynamic_annotations = set()
 
         is_selected = np.zeros(self.X_em.shape[0], bool)
         selected_idx = self.kd_tree.query_radius([[x, y]], r=r)[0]
@@ -217,10 +239,13 @@ class BaseExplorer(ABC):
         for i, label in enumerate(labels):
             ann = self.ax.annotate(label, (x - r, y), (-3, dy), textcoords='offset points', ha='right',
                                    va='center', fontsize=self.DYNM_FONT_SIZE,
-                                   bbox=dict(boxstyle='square,pad=0.1', fill=False),
+                                   bbox=dict(boxstyle='square,pad=0.1', alpha=0.45, facecolor="cyan",
+                                             edgecolor='black'),
                                    color='black')
-            self.annotations.append(ann)
+            self.dynamic_annotations.add(ann)
             dy -= 1.2 * self.DYNM_FONT_SIZE
+
+        self._resolve_dynamic_overlaps()
         return self.fig, self.ax
 
     def plot_interactive(self, r=5):
@@ -230,10 +255,14 @@ class BaseExplorer(ABC):
         """
 
         def onclick(event):
-            if event.button != 1:
-                return
-
-            self.plot_dynamic(event.xdata, event.ydata, self.lens.get_radius())
+            # left click - move lens
+            if event.button == 1:
+                self.plot_dynamic(event.xdata, event.ydata, self.lens.get_radius())
+            # right click - change radius
+            elif event.button == 3:
+                x, y = self.lens.center
+                new_r = euclidean((x, y), (event.xdata, event.ydata))
+                self.plot_dynamic(x, y, new_r)
 
         self.fig.canvas.mpl_connect('button_press_event', onclick)
         self.lens.set_radius(r)

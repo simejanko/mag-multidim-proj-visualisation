@@ -1,4 +1,4 @@
-""" Statistic utilities. Full source found at https://github.com/biolab/orange3-bioinformatics. """
+""" Statistic utilities. Original, unmodified source found at https://github.com/biolab/orange3-bioinformatics. """
 import math
 import threading
 import numpy as np
