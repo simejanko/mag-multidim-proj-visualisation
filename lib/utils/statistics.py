@@ -98,6 +98,7 @@ class Hypergeometric(LogBin):
 def p_adjust_bh(p):
     """
     Benjamini-Hochberg p-value correction for multiple hypothesis testing.
+
     :param p: numpy array or pandas Series of p-values
     :return: FDR corrected p-values
     """
@@ -106,3 +107,19 @@ def p_adjust_bh(p):
     steps = len(p) / np.arange(len(p), 0, -1)
     q = np.minimum(1, np.minimum.accumulate(steps * p[descend]))
     return q[orig]
+
+def two_tailed_p_to_one_tailed(statistic, p):
+    """
+    Converts two-tailed p-values to one-tailed p-values testing for greater-than side. Only works for symmetric distributions.
+
+    :param statistic: numpy array of statistic values for a two-tailed test
+    :param p: numpy array of p-values for a two-tailed test
+    :return one-tailed p-values
+    """
+    res = p.copy()
+
+    stat_pos = statistic > 0
+    res[stat_pos] /= 2
+    res[~stat_pos] = 1 - res[~stat_pos] / 2
+
+    return res

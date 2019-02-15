@@ -1,7 +1,7 @@
 from lib.base_explorer import BaseExplorer
 from scipy.stats import ttest_ind, ttest_1samp
 import numpy as np
-from lib.utils.statistics import Hypergeometric, p_adjust_bh
+from lib.utils.statistics import Hypergeometric, p_adjust_bh, two_tailed_p_to_one_tailed
 import pandas as pd
 
 #TODO: use normal indexing instead of bool indexing... a bit faster
@@ -13,14 +13,16 @@ import pandas as pd
 class TabExplorer(BaseExplorer):
     """ Visualisation tool for static and dynamic exploration of tabular dataset projection. """
 
-    def __init__(self, p_threshold=0.01, representative_threshold=0.5, use_two_sample_test=False, fdr_correction=True,
-                 max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5, max_discrete_values=3, fig_size=(12, 10)):
+    def __init__(self, p_threshold=0.01, representative_threshold=0.5, use_two_sample_test=False, one_tailed_test=False,
+                 fdr_correction=True, max_static_labels=3, max_dynamic_labels=5, min_cluster_size=5, max_discrete_values=3,
+                 fig_size=(12, 10)):
         """
         :param p_threshold: statistical significance (p-value) threshold for annotations
         :param representative_threshold: only show labels that represent at least this proportion of samples in a group.
                                          Addresses the representativeness vs significance problem.
         :param use_two_sample_test: whether to use two sample tests (t-test) or one sample tests
                                     (hypergeometric test for discrete values and t-test for continuous values)
+        :param one_tailed_test: whether to use one tailed test for continuous attributes (it's always used for discrete attributes)
         :param fdr_correction: whether to apply FDR correction to p-values (multiple comparisons problem)
         :param max_static_labels: maximum number of static labels per cluster
         :param max_dynamic_labels: maximum number of dynamic labels (shown for group of examples selected with a lens)
@@ -31,8 +33,10 @@ class TabExplorer(BaseExplorer):
         self.p_threshold = p_threshold
         self.representative_threshold = representative_threshold
         self.use_two_sample_test = use_two_sample_test
+        self.one_tailed_test = one_tailed_test
         self.fdr_correction = fdr_correction
         self.max_discrete_values = max_discrete_values
+
         self.df_numeric = None
         self.df_discrete = None
         self.numeric_means = None
@@ -47,6 +51,7 @@ class TabExplorer(BaseExplorer):
     def fit(self, df, X_em, clusters):
         """
         Performs any kind of preprocessing and caching needed for lens exploration.
+
         :param df: pandas DataFrame. Only the following dtypes will be considered: (object, category, bool, intXX, floatXX)
         :param X_em: numpy array of embeddings with shape (n_samples, 2)
         :param clusters: numpy array of cluster labels with shape (n_samples,)
@@ -69,6 +74,7 @@ class TabExplorer(BaseExplorer):
     def _numeric_p_values(self, is_in_cluster):
         """
         Computes p-values for continuous attributes using t-test between in-cluster and out-cluster groups.
+
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
         :return pandas Series with p-values
         """
@@ -79,9 +85,12 @@ class TabExplorer(BaseExplorer):
         # TODO: we only have to compute means and stds once and use the other ttest call
         if self.use_two_sample_test:
             numeric_out_cluster = self.df_numeric.loc[~is_in_cluster]
-            _, numeric_p_values = ttest_ind(numeric_in_cluster.values, numeric_out_cluster.values, equal_var=False)
+            ts, numeric_p_values = ttest_ind(numeric_in_cluster.values, numeric_out_cluster.values, equal_var=False)
         else:
-            _, numeric_p_values = ttest_1samp(numeric_in_cluster.values, self.numeric_means.values)
+            ts, numeric_p_values = ttest_1samp(numeric_in_cluster.values, self.numeric_means.values)
+
+        if self.one_tailed_test:
+            numeric_p_values = two_tailed_p_to_one_tailed(ts, numeric_p_values)
 
         # use MultiIndex for better compatibility with discrete p-values Series
         return pd.Series(numeric_p_values,
@@ -90,6 +99,7 @@ class TabExplorer(BaseExplorer):
     def _discrete_p_values(self, is_in_cluster):
         """
         Computes p-values for discrete attributes using hypergeometric test for every possible discrete value.
+
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
         :return  pandas Series with p-values
         """
@@ -103,9 +113,7 @@ class TabExplorer(BaseExplorer):
             discrete_out_cluster = self.df_discrete.loc[~is_in_cluster]
             ts, discrete_p_values = ttest_ind(discrete_in_cluster.values, discrete_out_cluster.values, equal_var=False)
             #convert to one-tailed t-test p-values since we're only looking for over-representations
-            t_pos = ts>0
-            discrete_p_values[t_pos] /= 2
-            discrete_p_values[~t_pos] = 1 - discrete_p_values[~t_pos]/2
+            discrete_p_values = two_tailed_p_to_one_tailed(ts, discrete_p_values)
         else:
             discrete_in_cluster_counts = discrete_in_cluster.sum()
             cluster_size = np.sum(is_in_cluster)
@@ -118,6 +126,7 @@ class TabExplorer(BaseExplorer):
     def _extract_labels(self, is_in_cluster, max_labels):
         """
         Get labels for a given cluster.
+
         :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
         :param max_labels: maximum number of labels to extract
         :return: list of labels
