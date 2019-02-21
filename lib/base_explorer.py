@@ -6,7 +6,7 @@ from matplotlib import patches
 from abc import ABC, abstractmethod
 from adjustText import adjust_text
 from scipy.spatial.distance import euclidean
-from lib.utils.geometry import rectangle_circle_bbox_intersect
+from lib.utils.geometry import rectangle_circle_bbox_intersect, rectangle_intersect
 from matplotlib.colors import ListedColormap
 from itertools import chain
 
@@ -200,14 +200,26 @@ class BaseExplorer(ABC):
         """
         for sa in self.static_annotations:
             sa.set_visible(True)
-            sa_bbox = sa.get_window_extent().transformed(self.ax.transData.inverted())
+            sa_bbox = sa.get_window_extent()
+            sa_bbox_t = sa.get_window_extent().transformed(self.ax.transData.inverted())
+
             sa_bbox = sa_bbox.x0, sa_bbox.y0, sa_bbox.width, sa_bbox.height
+            sa_bbox_t = sa_bbox_t.x0, sa_bbox_t.y0, sa_bbox_t.width, sa_bbox_t.height
 
             lens_circle = self.lens.center + (self.lens.get_radius(), )
 
-            if rectangle_circle_bbox_intersect(sa_bbox, lens_circle):
+            if rectangle_circle_bbox_intersect(sa_bbox_t, lens_circle):
                 sa.set_visible(False)
                 continue
+
+            #TODO: this can probably be done way more efficiently (eg. kd-tree) but we don't expect huge number of labels
+            for da in self.dynamic_annotations:
+                da_bbox = da.get_window_extent()
+                da_bbox = da_bbox.x0, da_bbox.y0, da_bbox.width, da_bbox.height
+
+                if rectangle_intersect(sa_bbox, da_bbox):
+                    sa.set_visible(False)
+                    break
 
 
     def plot_dynamic(self, x, y, r):
@@ -246,7 +258,7 @@ class BaseExplorer(ABC):
         for i, label in enumerate(labels):
             ann = self.ax.annotate(label, (x - r, y), (-3, dy), textcoords='offset points', ha='right',
                                    va='center', fontsize=self.DYNM_FONT_SIZE,
-                                   bbox=dict(boxstyle='square,pad=0.1', alpha=0.45, facecolor="cyan",
+                                   bbox=dict(boxstyle='square,pad=0.1', fill=False,
                                              edgecolor='black'),
                                    color='black')
             self.dynamic_annotations.add(ann)
