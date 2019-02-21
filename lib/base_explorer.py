@@ -7,6 +7,8 @@ from abc import ABC, abstractmethod
 from adjustText import adjust_text
 from scipy.spatial.distance import euclidean
 from lib.utils.geometry import rectangle_circle_bbox_intersect
+from matplotlib.colors import ListedColormap
+from itertools import chain
 
 class BaseExplorer(ABC):
     """ Base class for visualisation tools for static and dynamic exploration of projections for different types of data. """
@@ -169,10 +171,15 @@ class BaseExplorer(ABC):
             colors = [(0.5, 0.5, 0.5, 1)] * self.X_em.shape[0]
             legend_patches = []
         else:
-            cmap = plt.get_cmap('tab10')
+            #merge multiple discrete cmaps
+            cmaps = [plt.get_cmap('tab10'), plt.get_cmap('Set1'), plt.get_cmap('Set2'), plt.get_cmap('Set3'),
+                     plt.get_cmap('Accent'), plt.get_cmap('Dark2')]
+            cmap = ListedColormap(list(chain.from_iterable(cm.colors for cm in cmaps)))
+
             le = LabelEncoder()
             y = le.fit_transform(classes)
             colors = cmap(y)
+
             legend_patches = [patches.Patch(color=cmap(le.transform([c])[0]), label=c) for c in le.classes_]
 
         self.scatter_plot = self.ax.scatter(self.X_em[:, 0], self.X_em[:, 1], facecolor=colors,
