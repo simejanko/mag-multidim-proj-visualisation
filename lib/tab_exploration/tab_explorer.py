@@ -193,3 +193,196 @@ class TabExplorer(BaseExplorer):
                 break
 
         return labels
+
+
+class GiniExplorer(BaseExplorer):
+    """ Visualisation tool for static and dynamic exploration of tabular dataset projection using information measure (Gini impurity). """
+
+    def __init__(self, g_threshold=0.1, n_sample=50, find_intervals=True, max_static_labels=3,
+                 max_dynamic_labels=5, min_cluster_size=5,
+                 max_discrete_values=3, fig_size=(12, 10)):
+        """
+        :param g_threshold: relative gini gain threshold for labels. Gini gain is limited between 0 (worst)
+               and total gini impurity for a given cluster split (best). This parameter is relative and
+               is independent of number & sizes of clusters so it should be between 0 and 1.
+        :param n_sample: number of split points to sample when considering continuous attributes
+        :param find_intervals: whether to try and find intervals or only single split points for continuous attributes ()
+        :param max_static_labels: maximum number of static labels per cluster
+        :param max_dynamic_labels: maximum number of dynamic labels (shown for selected group of examples)
+        :param fig_size: Figure size.
+        """
+        super().__init__(max_static_labels=max_static_labels, max_dynamic_labels=max_dynamic_labels,
+                         min_cluster_size=min_cluster_size, fig_size=fig_size)
+
+        self.g_threshold = g_threshold
+        self.n_sample = n_sample
+        self.find_intervals = find_intervals
+        self.max_discrete_values = max_discrete_values
+        self.df_numeric = None
+        self.numeric_split_sample = None
+        self.df_discrete = None
+
+    def fit(self, df, X_em, clusters):
+        """
+        Performs any kind of preprocessing and caching needed for lens exploration.
+        :param df: pandas DataFrame. Only the following dtypes will be considered: (object, category, bool, intXX, floatXX)
+        :param X_em: numpy array of embeddings with shape (n_samples, 2)
+        :param clusters: numpy array of cluster labels with shape (n_samples,)
+        """
+
+        super().fit(df, X_em, clusters)
+        self.df_numeric = df.select_dtypes(include=[np.number]).astype(np.float32)
+        # sample for split point candidates
+        df_numeric_sample = self.df_numeric.sample(n=self.n_sample)
+        self.numeric_split_sample = {c: df_numeric_sample[c].unique().tolist() for c in df_numeric_sample.columns}
+
+        self.df_discrete = df.select_dtypes(include=[object, 'category', 'bool']).astype(object)
+        if not self.df_discrete.empty:
+            self.df_discrete = pd.concat(
+                [pd.get_dummies(self.df_discrete[col]).astype(bool) for col in self.df_discrete], axis=1,
+                keys=self.df_discrete.columns)
+
+    def _gini_impurity(self, is_class):
+        """
+        Computes Gini impurity for binary class.
+        :param is_class: numpy bool array indicating class memberships
+        :return: gini impurity, proportion in class
+        """
+        p = is_class.sum() / is_class.size
+        return 1 - (p ** 2 + (1 - p) ** 2), p
+
+    def _gini_gain(self, bool_atr, is_class):
+        """
+        Computes Gini gain for binary class and binary atribute split.
+        :param bool_atr: numpy bool array indicating binary atribute split
+        :param is_class: numpy bool array indicating class memberships
+        :return: gini gain, directionality bool
+        """
+        # TODO: this only needs to be computed once per cluster
+        total_impurity, total_p = self._gini_impurity(is_class)
+
+        n_bool_atr = bool_atr.sum()
+
+        # handle cases when we sample extreme values of attribute values
+        if n_bool_atr == 0 or n_bool_atr == bool_atr.size:
+            return 0, False
+
+        p_atr = n_bool_atr / bool_atr.size
+        g1, p1 = self._gini_impurity(is_class[bool_atr])
+        g2, _ = self._gini_impurity(is_class[~bool_atr])
+
+        return total_impurity - (p_atr * g1 + (1 - p_atr) * g2), p1 > total_p
+
+    def _discrete_gains(self, is_in_cluster):
+        """
+        Computes gains for discrete attributes.
+        :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
+        :return dict atr_name -> (Gini gain, associated atr_values)
+        """
+        ret = dict()
+        for atr in self.df_discrete.columns.get_level_values(0).unique():
+            best_values = []
+            best_gain = 0
+
+            df_atr = self.df_discrete[atr]
+            remaining_values = set(df_atr.columns)
+            prev = np.zeros(is_in_cluster.size).astype(bool)
+            for _ in range(self.max_discrete_values):
+                value_gains = {v: self._gini_gain(df_atr[v] | prev, is_in_cluster) for v in remaining_values}
+                # we're only interested in over representations of discrete values
+                value_gains = {v: g for v, (g, d) in value_gains.items() if d}
+                if len(value_gains) == 0:
+                    break
+
+                best_value = max(value_gains, key=lambda v: value_gains[v])
+
+                if value_gains[best_value] <= best_gain:
+                    break
+
+                best_values.append(best_value)
+                remaining_values.remove(best_value)
+                best_gain = value_gains[best_value]
+
+            if len(best_values) >= 1:
+                ret[atr] = (best_gain, best_values)
+
+        return ret
+
+    def _continuous_gains(self, is_in_cluster):
+        """
+        Computes gains for continuous attributes.
+        :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
+        :return dict atr_name -> (Gini gain, associated split points and directions)
+        """
+        ret = dict()
+        for atr in self.df_numeric.columns:
+            if atr == "Fare":
+                d = 0
+            gains = [self._gini_gain(self.df_numeric[atr] > s, is_in_cluster) for s in self.numeric_split_sample[atr]]
+            best_split_idx = np.argmax(next(zip(*gains)))
+            best_gain, direction = gains[best_split_idx]
+            best_bpoint = self.numeric_split_sample[atr][best_split_idx]
+            best_split = [(best_bpoint, direction)]
+
+            # TODO: refactor
+            if self.find_intervals:
+                gains = []
+
+                for s in self.numeric_split_sample[atr]:
+                    if direction and s > best_bpoint:
+                        bool_atr = (self.df_numeric[atr] < s) & (self.df_numeric[atr] > best_bpoint)
+                    elif not direction and s < best_bpoint:
+                        bool_atr = (self.df_numeric[atr] < best_bpoint) & (self.df_numeric[atr] > s)
+                    else:
+                        continue
+
+                    gains.append((self._gini_gain(bool_atr, is_in_cluster)[0], s))
+
+                best_split_idx = np.argmax(next(zip(*gains)))
+                best_interval_gain, best_bpoint2 = gains[best_split_idx]
+                if best_interval_gain > best_gain:
+                    best_split.append((best_bpoint2, not direction))
+                    best_split.sort(key=lambda s: s[1], reverse=True)
+                    best_gain = best_interval_gain
+
+            ret[atr] = (best_gain, best_split)
+
+        return ret
+
+    def _extract_labels(self, is_in_cluster, max_labels):
+        """
+        Get labels for a given cluster.
+        :param is_in_cluster: boolean array of shape (n_samples, ) that indicates cluster membership
+        :param max_labels: maximum number of labels to extract
+        :return: list of labels
+        """
+        discrete_gains = self._discrete_gains(is_in_cluster)
+        continuous_gains = self._continuous_gains(is_in_cluster)
+        gains = {**discrete_gains, **continuous_gains}
+
+        # threshold and select top max_labels attributes
+        total_impurity, _ = self._gini_impurity(is_in_cluster)
+        filtered_attributes = [atr for atr, g in gains.items() if g[0] / total_impurity > self.g_threshold]
+        selected_attributes = list(sorted(filtered_attributes, key=lambda k: gains[k][0], reverse=True))[:max_labels]
+
+        labels = []
+        for atr in selected_attributes:
+            if atr in discrete_gains:
+                values = list(map(str, discrete_gains[atr][1]))
+                if len(values) > 1:
+                    values[-1] = ' or ' + values[-1]
+
+                label = '{} = {}'.format(atr, ', '.join(values[:-1]) + values[-1])
+
+            else:
+                split_points = continuous_gains[atr][1]
+                if len(split_points) == 1:
+                    break_point, dir = split_points[0]
+                    label = '{} {} {:.2f}'.format(atr, '>' if dir else '<', break_point)
+                else:
+                    start, end = split_points[0][0], split_points[1][0]
+                    label = '{:.2f} < {} <{:.2f}'.format(start, atr, end)
+
+            labels.append(label)
+
+        return labels
