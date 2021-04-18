@@ -1,4 +1,4 @@
-# Primeri uporabe vizalizacije
-- **text_exploration.ipynb** : Primer uporabe tekstovne vizualizacije. Uporabljena podmnožica Reuters podatkov. 
-- **tab_exploration.ipynb** : Primer uporabe vizualizacije za tabelarične podatke.
-- **cell_exploration.ipynb** : Primer uporabe vizualizacije za celične tabelarične podatke (bioinformatika).
+# Showcases
+- **text_exploration.ipynb** : Text documents use case (Reuters dataset) 
+- **tab_exploration.ipynb** : Tabular data use case  (Titanic, Countries and FIFA datasets)
+- **cell_exploration.ipynb** : Cellular tabular data use case
