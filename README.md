@@ -9,7 +9,7 @@ Two-dimensional point-based visualizations of multidimensional data may reveal d
 
 ## Repository structure:
 * **data** : Datasets 
-* **papers** : Related works recap
+* **papers** : Related works recap (SLO language)
 * **lib** : Source code / library
 * **showcases** : Usage examples as jupyter notebooks
 
